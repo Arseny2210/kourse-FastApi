@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Словарь иностранных слов</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📚 Словарь иностранных слов</h1>
+        
+        <div class="auth-container">
+            <div class="auth-form">
+                <h2>Вход в систему</h2>
+                <form method="POST" action="/web/login">
+                    <div class="form-group">
+                        <label for="username">Имя пользователя:</label>
+                        <input type="text" id="username" name="username" required minlength="3" maxlength="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Пароль:</label>
+                        <input type="password" id="password" name="password" required minlength="8">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Войти</button>
+                    {% if login_error %}
+                        <div class="error-message">{{ login_error }}</div>
+                    {% endif %}
+                </form>
+            </div>
+
+            <div class="auth-form">
+                <h2>Регистрация</h2>
+                <form method="POST" action="/web/register">
+                    <div class="form-group">
+                        <label for="reg-username">Имя пользователя:</label>
+                        <input type="text" id="reg-username" name="username" required minlength="3" maxlength="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-password">Пароль:</label>
+                        <input type="password" id="reg-password" name="password" required minlength="8">
+                    </div>
+                    <button type="submit" class="btn btn-success">Зарегистрироваться</button>
+                    {% if register_error %}
+                        <div class="error-message">{{ register_error }}</div>
+                    {% endif %}
+                    {% if success_message %}
+                        <div class="success-message">{{ success_message }}</div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
