@@ -10,14 +10,14 @@ from auth import get_current_user, authenticate_user, create_access_token, get_p
 import os
 from jose import jwt
 from datetime import datetime, timedelta
-from admin import setup_admin  # Импортируем только setup_admin
+from admin import setup_admin  
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-# Создаем папки для шаблонов и статики, если их нет
 os.makedirs("templates", exist_ok=True)
 os.makedirs("static/css", exist_ok=True)
 os.makedirs("static/js", exist_ok=True)
 
-# Инициализация шаблонов
 templates = Jinja2Templates(directory="templates")
 
 app = FastAPI(
@@ -26,8 +26,8 @@ app = FastAPI(
     version="0.1.0",
     servers=[{"url": "http://127.0.0.1:8000", "description": "Local server"}],
     openapi_tags=[
-        {"name": "Аутентификация", "description": "Регистрация и вход"},
-        {"name": "Карточки", "description": "Управление карточками слов"}
+        {"name": "🔐 Аутентификация", "description": "Регистрация, вход и выход из системы."},
+        {"name": "📚 Карточки", "description": "Управление карточками: создание, редактирование, удаление, изменение статуса и просмотр."},
     ],
     swagger_ui_init_oauth={
         "clientId": "swagger-ui",
@@ -37,18 +37,20 @@ app = FastAPI(
     swagger_ui_parameters={"persistAuthorization": True}
 )
 
-# Настройка админки
 admin = setup_admin(app)
 
-# Подключение статики
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Корневой редирект на веб-интерфейс
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+@app.get(
+    "/",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+    summary="🏠 Главная страница",
+    description="Перенаправляет пользователя на страницу входа или регистрации."
+)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# Функция для получения пользователя из куки
 async def get_current_user_from_cookie(request: Request):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -59,8 +61,7 @@ async def get_current_user_from_cookie(request: Request):
     access_token = request.cookies.get("access_token")
     if not access_token:
         raise credentials_exception
-    
-    # Удаляем префикс "Bearer " если он есть
+
     if access_token.startswith("Bearer "):
         token = access_token[7:]
     else:
@@ -85,13 +86,22 @@ async def get_current_user_from_cookie(request: Request):
         raise credentials_exception
 
 # Защищённая страница дашборда
-@app.get("/dashboard", response_class=HTMLResponse)
+@app.get(
+    "/dashboard",
+    response_class=HTMLResponse,
+    summary="📊 Личный кабинет",
+    description="""
+    👋 Показывает все карточки текущего пользователя.  
+    📈 Отображает статистику: всего карточек, выучено, в процессе.  
+    🔒 Доступен только авторизованным пользователям (через куки с JWT).
+    """,
+    tags=["📚 Карточки"]
+)
 async def dashboard(
     request: Request,
     current_user: User = Depends(get_current_user_from_cookie)
 ):
     async with SessionLocal() as db:
-        # Получаем карточки пользователя
         result = await db.execute(
             select(Flashcard).where(Flashcard.owner_id == current_user.id)
         )
@@ -103,14 +113,22 @@ async def dashboard(
         "flashcards": flashcards
     })
 
-@app.post("/web/login", response_class=HTMLResponse)
+@app.post(
+    "/web/login",
+    response_class=HTMLResponse,
+    summary="🔑 Вход в систему",
+    description="""
+    📥 Принимает имя пользователя и пароль через HTML-форму.  
+    ✅ При успешной аутентификации устанавливает JWT-токен в куки и перенаправляет в личный кабинет.  
+    ❌ При ошибке показывает сообщение на той же странице.
+    """, tags=["🔐 Аутентификация"]
+)
 async def web_login(request: Request):
     """Обработка HTML формы входа"""
     form = await request.form()
     username = form.get("username")
     password = form.get("password")
     
-    # Валидация данных
     if not username or not password:
         return templates.TemplateResponse("index.html", {
             "request": request,
@@ -125,23 +143,33 @@ async def web_login(request: Request):
                 "login_error": "Неверное имя пользователя или пароль"
             }, status_code=401)
         
-        # Генерируем JWT токен
         access_token = create_access_token({"sub": user.username})
         
-        # Устанавливаем куки с токеном
+
         response = RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
         response.set_cookie(
             key="access_token", 
             value=f"Bearer {access_token}",
             httponly=True,
-            max_age=1800,  # 30 минут
-            secure=False,  # True в продакшене с HTTPS
+            max_age=1800, 
+            secure=False,  
             samesite="lax"
         )
         return response
 
-# Эндпоинт для создания новой карточки
-@app.post("/web/flashcards", response_class=HTMLResponse)
+
+@app.post(
+    "/web/flashcards",
+    response_class=HTMLResponse,
+    summary="➕ Добавить новую карточку",
+    description="""
+    💡 Добавляет карточку иностранного слова в коллекцию пользователя.  
+    🌍 Требуется: **иностранное слово** и **перевод**.  
+    📖 Пример использования — опционален (до 500 символов).  
+    ✅ Карточка сразу появится в личном кабинете.
+    """,
+    tags=["📚 Карточки"]
+)
 async def create_flashcard_web(
     request: Request,
     current_user: User = Depends(get_current_user_from_cookie)
@@ -151,7 +179,6 @@ async def create_flashcard_web(
     native_word = form.get("native_word")
     example = form.get("example", "")
     
-    # Валидация данных
     if not foreign_word or not native_word:
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
@@ -178,7 +205,6 @@ async def create_flashcard_web(
     
     async with SessionLocal() as db:
         try:
-            # Создаем новую карточку
             new_flashcard = Flashcard(
                 foreign_word=foreign_word,
                 native_word=native_word,
@@ -189,7 +215,6 @@ async def create_flashcard_web(
             await db.commit()
             await db.refresh(new_flashcard)
             
-            # Получаем обновленный список карточек
             result = await db.execute(
                 select(Flashcard).where(Flashcard.owner_id == current_user.id)
             )
@@ -211,14 +236,24 @@ async def create_flashcard_web(
                 "error": "Ошибка при создании карточки. Попробуйте позже."
             }, status_code=500)
 
-@app.post("/web/register", response_class=HTMLResponse)
+@app.post(
+    "/web/register",
+    response_class=HTMLResponse,
+    summary="🆕 Регистрация нового пользователя",
+    description="""
+    📝 Создаёт нового пользователя по данным из формы.  
+    🔒 Пароль хешируется (макс. 72 байта для совместимости с bcrypt).  
+    🚫 Имя должно быть от 3 до 20 символов, пароль — минимум 8 символов.  
+    ✅ После регистрации можно сразу войти.
+    """,
+    tags=["🔐 Аутентификация"]
+)
 async def web_register(request: Request):
     """Обработка HTML формы регистрации"""
     form = await request.form()
     username = form.get("username")
     password = form.get("password")
     
-    # Валидация данных
     if not username or not password:
         return templates.TemplateResponse("index.html", {
             "request": request,
@@ -237,7 +272,6 @@ async def web_register(request: Request):
             "register_error": "Пароль должен быть не менее 8 символов"
         }, status_code=400)
     
-    # Валидация максимальной длины пароля для bcrypt
     if len(password.encode('utf-8')) > 72:
         return templates.TemplateResponse("index.html", {
             "request": request,
@@ -246,7 +280,6 @@ async def web_register(request: Request):
     
     async with SessionLocal() as db:
         try:
-            # Проверяем существование пользователя
             existing = await db.execute(select(User).where(User.username == username))
             if existing.scalars().first():
                 return templates.TemplateResponse("index.html", {
@@ -254,7 +287,6 @@ async def web_register(request: Request):
                     "register_error": "Имя пользователя уже занято"
                 }, status_code=400)
             
-            # Создаем хеш пароля
             hashed_password = get_password_hash(password)
             db_user = User(username=username, hashed_password=hashed_password)
             db.add(db_user)
@@ -272,8 +304,17 @@ async def web_register(request: Request):
                 "register_error": "Ошибка при регистрации. Попробуйте позже."
             }, status_code=500)
 
-# Эндпоинт для редактирования карточки (форма)
-@app.get("/web/flashcards/{card_id}/edit", response_class=HTMLResponse)
+@app.get(
+    "/web/flashcards/{card_id}/edit",
+    response_class=HTMLResponse,
+    summary="✏️ Открыть редактирование карточки",
+    description="""
+    🖊️ Отображает форму для изменения карточки.  
+    🔍 Проверяет, что карточка принадлежит текущему пользователю.  
+    🛑 Если карточка не найдена — возвращает 404.
+    """,
+    tags=["📚 Карточки"]
+)
 async def edit_flashcard_form(
     request: Request,
     card_id: int,
@@ -297,8 +338,16 @@ async def edit_flashcard_form(
             "flashcard": flashcard
         })
 
-# Эндпоинт для обновления карточки
-@app.post("/web/flashcards/{card_id}/update", response_class=HTMLResponse)
+@app.post(
+    "/web/flashcards/{card_id}/update",
+    response_class=HTMLResponse,
+    summary="💾 Сохранить изменения в карточке",
+    description="""
+    🔄 Обновляет текст карточки: слово, перевод и пример.  
+    🔐 Доступно только владельцу.  
+    ✅ После сохранения возвращает в личный кабинет с подтверждением.
+    """,tags=["📚 Карточки"]
+)
 async def update_flashcard_web(
     request: Request,
     card_id: int,
@@ -309,7 +358,6 @@ async def update_flashcard_web(
     native_word = form.get("native_word")
     example = form.get("example", "")
     
-    # Валидация данных
     if not foreign_word or not native_word:
         return templates.TemplateResponse("edit_flashcard.html", {
             "request": request,
@@ -330,13 +378,11 @@ async def update_flashcard_web(
         if not flashcard:
             raise HTTPException(status_code=404, detail="Карточка не найдена")
         
-        # Обновляем данные
         flashcard.foreign_word = foreign_word
         flashcard.native_word = native_word
         flashcard.example = example if example else None
         await db.commit()
         
-        # Получаем обновленный список карточек
         result = await db.execute(
             select(Flashcard).where(Flashcard.owner_id == current_user.id)
         )
@@ -349,8 +395,18 @@ async def update_flashcard_web(
             "success": "Карточка успешно обновлена!"
         })
 
-# Эндпоинт для пометки карточки как выученной
-@app.post("/web/flashcards/{card_id}/mark-learned", response_class=HTMLResponse)
+@app.post(
+    "/web/flashcards/{card_id}/mark-learned",
+    response_class=HTMLResponse,
+    summary="✅ Пометить карточку как выученную",
+    description="""
+    🔄 Переключает статус: **выучено** ↔ **не выучено**.  
+    📊 Увеличивает счётчик повторений.  
+    📅 Обновляет дату последнего повторения.  
+    🎯 Помогает отслеживать прогресс изучения.
+    """,
+    tags=["📚 Карточки"]
+)
 async def mark_flashcard_learned(
     request: Request,
     card_id: int,
@@ -368,14 +424,12 @@ async def mark_flashcard_learned(
         if not flashcard:
             raise HTTPException(status_code=404, detail="Карточка не найдена")
         
-        # Обновляем статус
         flashcard.is_learned = not flashcard.is_learned
         flashcard.repetitions += 1
         flashcard.last_reviewed = datetime.utcnow()
         
         await db.commit()
         
-        # Получаем обновленный список карточек
         result = await db.execute(
             select(Flashcard).where(Flashcard.owner_id == current_user.id)
         )
@@ -388,8 +442,17 @@ async def mark_flashcard_learned(
             "success": f"Карточка '{flashcard.foreign_word}' помечена как {'выученная' if flashcard.is_learned else 'не выученная'}"
         })
 
-# Эндпоинт для удаления карточки
-@app.post("/web/flashcards/{card_id}/delete", response_class=HTMLResponse)
+@app.post(
+    "/web/flashcards/{card_id}/delete",
+    response_class=HTMLResponse,
+    summary="🗑️ Удалить карточку",
+    description="""
+    ❌ Полностью удаляет карточку из базы данных.  
+    🔒 Доступно только владельцу.  
+    ⚠️ Действие **нельзя отменить** — запрашивается подтверждение в браузере.
+    """,
+    tags=["📚 Карточки"]
+)
 async def delete_flashcard_web(
     request: Request,
     card_id: int,
@@ -407,11 +470,9 @@ async def delete_flashcard_web(
         if not flashcard:
             raise HTTPException(status_code=404, detail="Карточка не найдена")
         
-        # Удаляем карточку
         await db.delete(flashcard)
         await db.commit()
         
-        # Получаем обновленный список карточек
         result = await db.execute(
             select(Flashcard).where(Flashcard.owner_id == current_user.id)
         )
@@ -424,8 +485,17 @@ async def delete_flashcard_web(
             "success": f"Карточка '{flashcard.foreign_word}' успешно удалена"
         })
 
-# Выход из системы
-@app.get("/logout", response_class=HTMLResponse)
+@app.get(
+    "/logout",
+    response_class=HTMLResponse,
+    summary="🚪 Выход из системы",
+    description="""
+    🍪 Удаляет JWT-токен из куки.  
+    🔄 Перенаправляет на главную страницу.  
+    👋 Пользователь больше не авторизован.
+    """,
+    tags=["🔐 Аутентификация"]
+)
 async def logout(request: Request):
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     response.delete_cookie("access_token")
@@ -436,7 +506,6 @@ async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    # Создание суперпользователя
     async with SessionLocal() as db:
         result = await db.execute(select(User).where(User.is_superuser == True))
         superuser = result.scalars().first()
@@ -448,3 +517,41 @@ async def startup():
             print("✅ Создан суперпользователь для админки:")
             print("   Логин: admin")
             print("   Пароль: admin123")
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Обработчик всех HTTP-ошибок, включая 404."""
+    if exc.status_code == 404:
+        return templates.TemplateResponse(
+            "404.html", 
+            {"request": request}, 
+            status_code=404
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "HTTP Error",
+            "detail": exc.detail,
+            "status_code": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Обработчик ошибок валидации (422 Unprocessable Entity)"""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation Error",
+            "detail": [
+                {
+                    "field": ".".join(str(loc) for loc in error["loc"][1:]),
+                    "message": error["msg"],
+                    "type": error["type"]
+                }
+                for error in exc.errors()
+            ],
+            "status_code": 422
+        }
+    )

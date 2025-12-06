@@ -178,15 +178,12 @@
 
 		<script>
 			document.addEventListener('DOMContentLoaded', function () {
-				// Фильтрация карточек
 				const filterButtons = document.querySelectorAll('.filter-btn')
 				const flashcards = document.querySelectorAll('.flashcard')
 
 				filterButtons.forEach(button => {
 					button.addEventListener('click', function () {
-						// Убираем активный класс у всех кнопок
 						filterButtons.forEach(btn => btn.classList.remove('active'))
-						// Добавляем активный класс текущей кнопке
 						this.classList.add('active')
 
 						const filter = this.dataset.filter
@@ -209,7 +206,6 @@
 					})
 				})
 
-				// Подтверждение удаления
 				const deleteForms = document.querySelectorAll('.delete-form')
 				deleteForms.forEach(form => {
 					form.addEventListener('submit', function (e) {
@@ -223,7 +219,6 @@
 					})
 				})
 
-				// Плавное появление сообщений
 				const messages = document.querySelectorAll(
 					'.error-message, .success-message'
 				)
@@ -235,7 +230,6 @@
 						message.style.opacity = '1'
 					}, 100)
 
-					// Автоматическое скрытие через 5 секунд
 					setTimeout(() => {
 						message.style.opacity = '0'
 						setTimeout(() => {

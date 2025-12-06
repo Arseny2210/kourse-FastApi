@@ -9,7 +9,6 @@ from database import SessionLocal
 from models import User
 from typing import Optional
 
-# Настройки безопасности
 SECRET_KEY = "your-very-secret-jwt-key-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -18,13 +17,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 def verify_password(plain_password, hashed_password):
-    # Обрезаем пароль до 72 байт для совместимости с bcrypt
     if isinstance(plain_password, str) and len(plain_password) > 72:
         plain_password = plain_password[:72]
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
-    # Обрезаем пароль до 72 байт перед хешированием
     if isinstance(password, str) and len(password) > 72:
         password = password[:72]
     return pwd_context.hash(password)
@@ -57,7 +54,6 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Удаляем префикс "Bearer " если он есть
         if token.startswith("Bearer "):
             token = token[7:]
             
@@ -88,7 +84,6 @@ async def get_current_user_from_cookie(
     if not access_token:
         raise credentials_exception
     
-    # Удаляем префикс "Bearer " если он есть
     if access_token.startswith("Bearer "):
         token = access_token[7:]
     else:

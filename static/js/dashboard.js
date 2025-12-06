@@ -1,6 +1,4 @@
-// static/js/dashboard.js
 document.addEventListener('DOMContentLoaded', function () {
-	// Обработчик для формы добавления карточки
 	const flashcardForm = document.getElementById('add-flashcard-form')
 	if (flashcardForm) {
 		flashcardForm.addEventListener('submit', function (e) {
@@ -26,7 +24,6 @@ document.addEventListener('DOMContentLoaded', function () {
 				return
 			}
 
-			// Показываем сообщение о загрузке
 			const submitBtn = this.querySelector('button[type="submit"]')
 			const originalText = submitBtn.textContent
 			submitBtn.textContent = 'Добавление...'
@@ -34,7 +31,6 @@ document.addEventListener('DOMContentLoaded', function () {
 		})
 	}
 
-	// Автоматическая подсветка карточек
 	const flashcards = document.querySelectorAll('.flashcard')
 	flashcards.forEach(card => {
 		card.addEventListener('click', function () {

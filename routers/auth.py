@@ -23,7 +23,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(SessionLocal)):
 
 @router.post("/token", summary="Получить JWT-токен")
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),  # ИСПРАВЛЕНО: двоеточие после form_data
+    form_data: OAuth2PasswordRequestForm = Depends(),  
     db: AsyncSession = Depends(SessionLocal)
 ):
     user = await authenticate_user(db, form_data.username, form_data.password)
